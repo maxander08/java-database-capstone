@@ -1,111 +1,75 @@
 package com.project.back_end.services;
 
 import com.project.back_end.models.Appointment;
-import java.sql.*;
-import java.time.LocalDateTime;
+import com.project.back_end.models.Doctor;
+import com.project.back_end.repositories.AppointmentRepository;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-/**
- * Service layer responsible for coordinating business validation logic 
- * and safety guardrails surrounding appointment bookings and cancellations.
- */
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Service
 public class AppointmentService {
 
-    private final Connection databaseConnection;
+    private final AppointmentRepository appointmentRepository;
+    private final TokenService tokenService;
 
-    public AppointmentService(Connection databaseConnection) {
-        this.databaseConnection = databaseConnection;
+    // Injecting dependencies directly via constructor routing
+    public AppointmentService(AppointmentRepository appointmentRepository, TokenService tokenService) {
+        this.appointmentRepository = appointmentRepository;
+        this.tokenService = tokenService;
     }
 
     /**
-     * Fulfills US-202: Self-Service Appointment Booking
-     * Validates that a requested time slot is not already taken before executing the query.
+     * Fulfills Requirement: Book Appointment with direct persistence.
+     * Maps and commits a new appointment entity directly into the system database.
      */
-    public boolean bookAppointment(Long patientId, Long doctorId, LocalDateTime appointmentTime) {
-        // Business Rule Guardrail: Cannot book appointments in the past
-        if (appointmentTime.isBefore(LocalDateTime.now())) {
-            System.err.println("Validation Error: Cannot book an appointment in the past.");
-            return false;
+    @Transactional
+    public Appointment bookAppointment(String sessionToken, Appointment appointment) {
+        // Core Security Guardrail
+        if (!tokenService.isTokenValidForRole(sessionToken, "PATIENT") && 
+            !tokenService.isTokenValidForRole(sessionToken, "ADMIN")) {
+            throw new SecurityException("Access Denied: Unauthorized session token context.");
         }
 
-        // Check if the doctor already has a conflicting appointment at that exact time
-        String validationQuery = "SELECT COUNT(*) FROM appointments WHERE doctor_id = ? AND appointment_time = ? AND status = 'SCHEDULED'";
-        String insertQuery = "INSERT INTO appointments (patient_id, doctor_id, appointment_time, status) VALUES (?, ?, ?, 'SCHEDULED')";
-
-        try {
-            // Check for scheduling conflict
-            try (PreparedStatement checkStmt = databaseConnection.prepareStatement(validationQuery)) {
-                checkStmt.setLong(1, doctorId);
-                checkStmt.setTimestamp(2, Timestamp.valueOf(appointmentTime));
-                try (ResultSet rs = checkStmt.executeQuery()) {
-                    if (rs.next() && rs.getInt(1) > 0) {
-                        System.err.println("Validation Error: The selected time slot is already booked for this doctor.");
-                        return false;
-                    }
-                }
-            }
-
-            // Execute booking transaction
-            try (PreparedStatement insertStmt = databaseConnection.prepareStatement(insertQuery)) {
-                insertStmt.setLong(1, patientId);
-                insertStmt.setLong(2, doctorId);
-                insertStmt.setTimestamp(3, Timestamp.valueOf(appointmentTime));
-                
-                int rowsAffected = insertStmt.executeUpdate();
-                return rowsAffected > 0;
-            }
-
-        } catch (SQLException e) {
-            System.err.println("Database error during appointment booking execution: " + e.getMessage());
-            return false;
-        }
+        // CRITICAL FIX: Directly interact with the repository tracking framework to save changes
+        return appointmentRepository.save(appointment);
     }
 
     /**
-     * Fulfills US-204: Reschedule or Cancel Appointments
-     * Implements the business rule requiring a 24-hour notice before cancellation.
+     * Fulfills Requirement: Retrieve appointments filtered by doctor and a specific date target.
      */
-    public boolean cancelAppointmentWithNotice(Long appointmentId) {
-        String fetchQuery = "SELECT appointment_time, status FROM appointments WHERE id = ?";
-        String updateQuery = "UPDATE appointments SET status = 'CANCELLED' WHERE id = ?";
-
-        try {
-            LocalDateTime appointmentTime = null;
-            String status = "";
-
-            try (PreparedStatement fetchStmt = databaseConnection.prepareStatement(fetchQuery)) {
-                fetchStmt.setLong(1, appointmentId);
-                try (ResultSet rs = fetchStmt.executeQuery()) {
-                    if (rs.next()) {
-                        appointmentTime = rs.getTimestamp("appointment_time").toLocalDateTime();
-                        status = rs.getString("status");
-                    } else {
-                        System.err.println("Error: Appointment record not found.");
-                        return false;
-                    }
-                }
-            }
-
-            // Business Rule Guardrail: Check for 24-hour buffer zone
-            if (LocalDateTime.now().isAfter(appointmentTime.minusHours(24))) {
-                System.err.println("Validation Error: Appointments can only be cancelled at least 24 hours in advance.");
-                return false;
-            }
-
-            if ("COMPLETED".equals(status)) {
-                System.err.println("Validation Error: Cannot cancel a completed appointment.");
-                return false;
-            }
-
-            // Update status
-            try (PreparedStatement updateStmt = databaseConnection.prepareStatement(updateQuery)) {
-                updateStmt.setLong(1, appointmentId);
-                int rowsAffected = updateStmt.executeUpdate();
-                return rowsAffected > 0;
-            }
-
-        } catch (SQLException e) {
-            System.err.println("Database error during cancellation execution: " + e.getMessage());
-            return false;
+    @Transactional(readOnly = true)
+    public List<Appointment> getAppointmentsByDoctorAndDate(Doctor doctor, LocalDate date) {
+        if (doctor == null || date == null) {
+            throw new IllegalArgumentException("Validation Error: Doctor profile reference and calendar date cannot be null.");
         }
+
+        // Establish the absolute boundary times for the target calendar date
+        LocalDateTime startOfDay = date.atStartOfDay();
+        LocalDateTime endOfDay = date.atTime(23, 59, 59);
+
+        // Fetch using a custom query definition or filter via stream collection mappings
+        return appointmentRepository.findByDoctorAndAppointmentTimeBetween(doctor, startOfDay, endOfDay);
+    }
+
+    /**
+     * Cancels an existing booked appointment session slot out of the tracking record layer.
+     */
+    @Transactional
+    public void cancelAppointment(String sessionToken, Long appointmentId) {
+        if (!tokenService.isTokenValidForRole(sessionToken, "PATIENT") && 
+            !tokenService.isTokenValidForRole(sessionToken, "ADMIN")) {
+            throw new SecurityException("Access Denied: Unauthorized session token context.");
+        }
+
+        Appointment appointment = appointmentRepository.findById(appointmentId)
+                .orElseThrow(() -> new IllegalArgumentException("Error: Specified appointment entry ID does not exist."));
+        
+        appointment.setStatus("CANCELLED");
+        appointmentRepository.save(appointment); // Directly updates state flags back to database
     }
 }
