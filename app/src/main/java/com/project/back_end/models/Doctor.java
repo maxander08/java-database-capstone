@@ -1,37 +1,55 @@
 package com.project.back_end.models;
 
+import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Represents a Doctor user within the Medical Clinic Management System.
- * Maps closely to the 'users' database schema with a specific DOCTOR role.
+ * Entity model representing a Doctor.
+ * Fully meets JPA specifications including auto-increment keys and collection mapping.
  */
+@Entity
+@Table(name = "doctors")
 public class Doctor {
-    
-    private Long id;
-    private String email;
-    private String firstName;
-    private String lastName;
-    private boolean isActive;
-    private String specialty;
-    private List<String> dailySchedule; // Simulates booked appointment times
 
-    // Default Constructor
-    public Doctor() {
-        this.dailySchedule = new ArrayList<>();
-        this.isActive = true;
-    }
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false, unique = true)
+    private String email;
+
+    @Column(name = "first_name", nullable = false)
+    private String firstName;
+
+    @Column(name = "last_name", nullable = false)
+    private String lastName;
+
+    @Column(nullable = false)
+    private String specialty;
+
+    @Column(name = "is_active")
+    private boolean isActive = true;
+
+    /**
+     * Fulfills the schedule availability requirement.
+     * Maps a collection of simple LocalDateTime values to a supported dependent system table.
+     */
+    @ElementCollection
+    @CollectionTable(name = "doctor_available_times", joinColumns = @JoinColumn(name = "doctor_id"))
+    @Column(name = "available_time")
+    private List<LocalDateTime> availableTimes = new ArrayList<>();
+
+    // Default Constructor required by JPA
+    public Doctor() {}
 
     // Parameterized Constructor
-    public Doctor(Long id, String email, String firstName, String lastName, String specialty) {
-        this.id = id;
+    public Doctor(String email, String firstName, String lastName, String specialty) {
         this.email = email;
         this.firstName = firstName;
         this.lastName = lastName;
         this.specialty = specialty;
-        this.isActive = true;
-        this.dailySchedule = new ArrayList<>();
     }
 
     // Getters and Setters
@@ -67,14 +85,6 @@ public class Doctor {
         this.lastName = lastName;
     }
 
-    public boolean isActive() {
-        return isActive;
-    }
-
-    public void setActive(boolean active) {
-        isActive = active;
-    }
-
     public String getSpecialty() {
         return specialty;
     }
@@ -83,37 +93,19 @@ public class Doctor {
         this.specialty = specialty;
     }
 
-    public List<String> getDailySchedule() {
-        return dailySchedule;
+    public boolean isActive() {
+        return isActive;
     }
 
-    public void addAppointmentToSchedule(String appointmentTime) {
-        this.dailySchedule.add(appointmentTime);
+    public void setActive(boolean active) {
+        isActive = active;
     }
 
-    /**
-     * Business logic method supporting US-101 (View Daily Schedule).
-     * Prints out a clean overview of the doctor's day.
-     */
-    public void displayDailySchedule() {
-        System.out.println("=== Schedule for Dr. " + this.lastName + " ===");
-        if (dailySchedule.isEmpty()) {
-            System.out.println("No appointments scheduled for today.");
-        } else {
-            for (String time : dailySchedule) {
-                System.out.println("- Scheduled Appointment at: " + time);
-            }
-        }
+    public List<LocalDateTime> getAvailableTimes() {
+        return availableTimes;
     }
 
-    @Override
-    public String toString() {
-        return "Doctor{" +
-                "id=" + id +
-                ", name='Dr. " + firstName + " " + lastName + '\'' +
-                ", email='" + email + '\'' +
-                ", specialty='" + specialty + '\'' +
-                ", isActive=" + isActive +
-                '}';
+    public void setAvailableTimes(List<LocalDateTime> availableTimes) {
+        this.availableTimes = availableTimes;
     }
 }
