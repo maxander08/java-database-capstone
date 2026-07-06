@@ -1,31 +1,40 @@
-name: Java Backend CI
+name: Java Backend CI Pipeline
 
-# Controls when the workflow will run
+# Configures the automation engine to automatically trigger on code delivery events
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ main, master, develop ]
   pull_request:
-    branches: [ "main", "master" ]
+    branches: [ main, master ]
 
 jobs:
-  build:
-    name: Compile and Test Java Backend
+  build-and-verify:
+    name: Compile and Verify Application
     runs-on: ubuntu-latest
 
     steps:
-    # Step 1: Check out the repository source code so the runner can access it
-    - name: Checkout Repository
-      uses: actions/checkout@v4
+      # Step 1: Securely pull down a copy of your source code repository into the runner workspace
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
 
-    # Step 2: Set up the Java Development Kit (JDK) environment
-    - name: Set up JDK 17
-      uses: actions/setup-java@v4
-      with:
-        java-version: '17'
-        distribution: 'temurin'
-        cache: 'maven' # Caches dependencies to make subsequent workflow runs significantly faster
+      # Step 2: Establish the foundational OpenJDK 17 build dependencies environment
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven' # Automatically speeds up sequential builds by caching downloaded packages
 
-    # Step 3: Run the compilation process and execute unit tests
-    # Note: If your pom.xml is inside a subdirectory (like /app), add a working-directory flag
-    - name: Compile Code and Run Tests with Maven
-      run: mvn clean verify
+      # Step 3: Ensure the Maven Wrapper executable bit permissions are preserved inside linux hosts
+      - name: Grant Execute Permission to Maven Wrapper
+        run: chmod +x ./mvnw
+        # CRITICAL FIX: If your pom.xml lives inside a nested sub-folder like 'backend', 
+        # uncomment the line below so the runner target matches your repository design:
+        # working-directory: ./backend
+
+      # Step 4: Execute the complete testing, analysis, and build validation lifecycle
+      # CRITICAL FIX: Replaced system 'mvn' with the strict project configuration wrapper './mvnw'
+      - name: Build and Verify Project via Maven Wrapper
+        run: ./mvnw clean verify
+        # CRITICAL FIX: Ensure compile tracking points perfectly to your active pom.xml destination path
+        # working-directory: ./backend
