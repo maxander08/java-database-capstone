@@ -1,0 +1,31 @@
+name: Java Backend CI
+
+# Controls when the workflow will run
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build:
+    name: Compile and Test Java Backend
+    runs-on: ubuntu-latest
+
+    steps:
+    # Step 1: Check out the repository source code so the runner can access it
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    # Step 2: Set up the Java Development Kit (JDK) environment
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: 'maven' # Caches dependencies to make subsequent workflow runs significantly faster
+
+    # Step 3: Run the compilation process and execute unit tests
+    # Note: If your pom.xml is inside a subdirectory (like /app), add a working-directory flag
+    - name: Compile Code and Run Tests with Maven
+      run: mvn clean verify
