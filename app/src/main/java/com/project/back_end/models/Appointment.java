@@ -1,38 +1,59 @@
 package com.project.back_end.models;
 
+import jakarta.persistence.*;
+import jakarta.validation.constraints.Future;
+import jakarta.validation.constraints.NotNull;
 import java.time.LocalDateTime;
 
 /**
- * Represents an Appointment within the Medical Clinic Management System.
- * Maps closely to the 'appointments' database schema, linking a Patient and a Doctor.
+ * Entity model representing a clinical Appointment.
+ * Fully complies with relational mappings and entity validation constraints.
  */
+@Entity
+@Table(name = "appointments")
 public class Appointment {
 
-    // Enum to represent the state of the appointment
-    public enum AppointmentStatus {
-        SCHEDULED,
-        COMPLETED,
-        CANCELLED
-    }
-
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    private Long patientId;
-    private Long doctorId;
-    private LocalDateTime appointmentTime;
-    private AppointmentStatus status;
 
-    // Default Constructor
-    public Appointment() {
-        this.status = AppointmentStatus.SCHEDULED;
-    }
+    /**
+     * Maps the relational link back to the Patient (User entity).
+     * Automatically establishes the patient_id foreign key constraint in MySQL.
+     */
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "patient_id", nullable = false)
+    @NotNull(message = "An appointment must be assigned to a valid patient.")
+    private User patient;
+
+    /**
+     * Maps the relational link back to the Doctor entity.
+     * Automatically establishes the doctor_id foreign key constraint in MySQL.
+     */
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "doctor_id", nullable = false)
+    @NotNull(message = "An appointment must be assigned to a valid doctor.")
+    private Doctor doctor;
+
+    /**
+     * Enforces that appointment schedules cannot be blank or set retroactively.
+     */
+    @Column(name = "appointment_time", nullable = false)
+    @NotNull(message = "Appointment time date entry cannot be blank.")
+    @Future(message = "Appointment time must be scheduled for a future date.")
+    private LocalDateTime appointmentTime;
+
+    @Column(nullable = false)
+    private String status = "SCHEDULED"; // e.g., SCHEDULED, COMPLETED, CANCELLED
+
+    // Default Constructor required by JPA
+    public Appointment() {}
 
     // Parameterized Constructor
-    public Appointment(Long id, Long patientId, Long doctorId, LocalDateTime appointmentTime) {
-        this.id = id;
-        this.patientId = patientId;
-        this.doctorId = doctorId;
+    public Appointment(User patient, Doctor doctor, LocalDateTime appointmentTime) {
+        this.patient = patient;
+        this.doctor = doctor;
         this.appointmentTime = appointmentTime;
-        this.status = AppointmentStatus.SCHEDULED;
     }
 
     // Getters and Setters
@@ -44,20 +65,20 @@ public class Appointment {
         this.id = id;
     }
 
-    public Long getPatientId() {
-        return patientId;
+    public User getPatient() {
+        return patient;
     }
 
-    public void setPatientId(Long patientId) {
-        this.patientId = patientId;
+    public void setPatient(User patient) {
+        this.patient = patient;
     }
 
-    public Long getDoctorId() {
-        return doctorId;
+    public Doctor getDoctor() {
+        return doctor;
     }
 
-    public void setDoctorId(Long doctorId) {
-        this.doctorId = doctorId;
+    public void setDoctor(Doctor doctor) {
+        this.doctor = doctor;
     }
 
     public LocalDateTime getAppointmentTime() {
@@ -68,35 +89,11 @@ public class Appointment {
         this.appointmentTime = appointmentTime;
     }
 
-    public AppointmentStatus getStatus() {
+    public String getStatus() {
         return status;
     }
 
-    public void setStatus(AppointmentStatus status) {
+    public void setStatus(String status) {
         this.status = status;
-    }
-
-    /**
-     * Business logic method supporting US-204 (Reschedule or Cancel Appointments).
-     * Ensures appointments can only be modified if they aren't already completed.
-     */
-    public boolean cancelAppointment() {
-        if (this.status == AppointmentStatus.COMPLETED) {
-            System.out.println("Error: Cannot cancel a completed appointment.");
-            return false;
-        }
-        this.status = AppointmentStatus.CANCELLED;
-        return true;
-    }
-
-    @Override
-    public String toString() {
-        return "Appointment{" +
-                "id=" + id +
-                ", patientId=" + patientId +
-                ", doctorId=" + doctorId +
-                ", appointmentTime=" + appointmentTime +
-                ", status=" + status +
-                '}';
     }
 }
